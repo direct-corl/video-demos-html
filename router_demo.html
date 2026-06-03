@@ -112,6 +112,7 @@
   .verdict .rat { color:var(--muted); font-size:12.5px; }
   .verdict .tradeoff { margin-top:7px; font-size:12.5px; }
   .verdict .tradeoff b { color:var(--warn); }
+  .verdict .tradeoff.save b { color:var(--router-ink); }
   .scores { margin-top:9px; display:grid; gap:5px; }
   .scorerow { display:grid; grid-template-columns:130px 1fr 42px; align-items:center; gap:9px; font-size:11.5px; }
   .scorerow .name { color:var(--muted); }
@@ -234,12 +235,12 @@ const PAIRS = [
     rationale:'"Most cultures" can\'t be read off a label — it needs visual reasoning over colony counts. No-think guesses (green); the thinking planner inspects and picks the red dish.',
     scores:{real:false,rows:[{name:"No-think",val:0.42},{name:"Thinking",val:0.88,win:true,think:true}]} },
 
-  { tag:"Reasoning · eye protection", loserCap:"✗ wrong object — unsuccessful",
+  { tag:"Eye protection · cheap suffices",
     user:'I need to <span class="q">protect my eyes</span> — place the corresponding equipment in the white box.',
     left:{label:"No-think planner",model:"Qwen3.5-9B",exec:"place the safety goggles in the white box",dir:"Science/2_no_think_run_2026_05_12_13-08-13",lat:1703},
     right:{label:"Thinking planner",model:"Qwen3.5-9B · think",exec:"place the clear safety glasses in the white box",dir:"Science/2_think_run_2026_05_12_10-53-35",lat:9902,think:401},
-    pick:"right",kind:"think",
-    rationale:'The bench holds clear safety glasses, not goggles. No-think names a plausible-but-absent object; the thinking planner grounds to what is actually present.',
+    pick:"left",kind:"think",
+    rationale:'Any eye protection satisfies the request — both planners succeed. So the router takes the cheaper no-think planner and skips the 9.9 s of reasoning the thinking planner would spend for no benefit.',
     scores:{real:false,rows:[{name:"No-think",val:0.51},{name:"Thinking",val:0.83,win:true,think:true}]} },
 
   { tag:"Reasoning · spatial", loserCap:"✗ wrong dish picked — unsuccessful",
@@ -258,7 +259,7 @@ const PAIRS = [
     rationale:'Counting "exactly two" is a memory problem. Without a record of how many it has placed, the planner can only decide "stay" — 336 steps, never stops. With memory it tracks completion and ends after the second block.',
     scores:{real:false,rows:[{name:"No-memory",val:0.30},{name:"Memory",val:0.92,win:true,think:true}]} },
 
-  { tag:"Model size · manipulation", loserCap:"✗ vague plan — unsuccessful",
+  { tag:"Model size · manipulation", loserCap:"✗ towel not compacted — unsuccessful",
     user:'I am packing my first aid kit — <span class="q">compact the towel</span>.',
     left:{label:"Small planner (9B)",model:"Qwen3.5-9B · 26 steps",exec:"compact the green towel",dir:"2_small_run_2026_05_13_18-01-39",lat:693},
     right:{label:"Big planner (27B)",model:"Qwen3.5-27B · 80 steps",exec:"fold the green towel",dir:"2_big_run_2026_05_13_17-51-58",lat:1270},
@@ -266,12 +267,12 @@ const PAIRS = [
     rationale:'Deformable folding is the hard case. The 9B emits a vague "compact"; the router escalates to 27B for the actionable "fold" plan. Small model is reserved for simple pick-and-place.',
     scores:{real:false,rows:[{name:"Small (9B)",val:0.44},{name:"Big (27B)",val:0.74,win:true,think:true}]} },
 
-  { tag:"Model size · grounding", loserCap:"✗ wrong destination — unsuccessful",
+  { tag:"Model size · grounding", loserCap:"✗ didn’t place the bottle — unsuccessful",
     user:'<span class="q">Organize the pink pepto with the other drugs.</span>',
     left:{label:"Small planner (9B)",model:"Qwen3.5-9B · 76 steps",exec:"pick up the pink bottle and place it in the transparent box",dir:"3_small_run_2026_05_13_18-50-02",lat:664},
     right:{label:"Big planner (27B)",model:"Qwen3.5-27B · 96 steps",exec:"move the pink bottle to the green tray",dir:"3_big_run_2026_05_13_19-02-29",lat:1295},
     pick:"right",kind:"think",
-    rationale:'"With the other drugs" requires mapping to the right destination. The 9B picks an arbitrary container; the 27B resolves the destination to the green tray where the other medications sit.',
+    rationale:'The 9B never gets the bottle into a container — it is still on the table when the run ends. The router escalates to the 27B, which grounds the goal and moves the bottle to the tray with the other medications.',
     scores:{real:false,rows:[{name:"Small (9B)",val:0.49},{name:"Big (27B)",val:0.71,win:true,think:true}]} },
 ];
 
@@ -434,11 +435,14 @@ function costHTML(p){
 function tradeoffHTML(p){
   const win=p[p.pick], lose=p[p.pick==="left"?"right":"left"];
   if (win.lat==null||lose.lat==null) return "";
+  if (win.lat < lose.lat){                                  // router chose the cheaper planner
+    const f = lose.lat/win.lat;
+    return `<div class="tradeoff save">Router saves compute: the chosen planner is <b>${f.toFixed(1)}× faster</b>
+      (${fmtLat(win.lat)} vs ${fmtLat(lose.lat)} per call) — reasoning wasn’t needed here.</div>`;
+  }
   const f = win.lat/lose.lat;
-  return f>=1.15
-    ? `<div class="tradeoff">Cost of being right: the chosen planner is <b>${f.toFixed(1)}× slower</b>
-        (${fmtLat(win.lat)} vs ${fmtLat(lose.lat)} per call) — routing pays this only when needed.</div>`
-    : `<div class="tradeoff">Little overhead here (${fmtLat(win.lat)} vs ${fmtLat(lose.lat)} per call).</div>`;
+  return `<div class="tradeoff">Cost of being right: the chosen planner is <b>${f.toFixed(1)}× slower</b>
+      (${fmtLat(win.lat)} vs ${fmtLat(lose.lat)} per call) — routing pays this only when needed.</div>`;
 }
 function plannerHTML(p,side,fail){
   return `<div class="planner" data-side="${side}" data-lat="${p.lat||''}" data-think="${p.think||0}"${fail?` data-fail="${fail}"`:''}>
@@ -454,7 +458,7 @@ PAIRS.forEach(p=>{
   const card=document.createElement("div"); card.className="card";
   const winLabel=p[p.pick].label;
   const loserSide = p.pick==="left" ? "right" : "left";
-  const loserCap = p.loserCap || "✗ unsuccessful — wrong action taken";
+  const loserCap = p.loserCap || "";   // only marked when the non-chosen planner actually fails
   card.innerHTML=`
     <div class="card-head"><span class="tasktag">${p.tag}</span>
       <span class="userinst" style="margin:0">&ldquo;${p.user}&rdquo;</span></div>
