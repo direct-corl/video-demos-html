@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Router · Planner Alignment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f4f6f8; --panel:#ffffff; --panel2:#f7f9fb; --inset:#ffffff; --track:#e6eaef;
+    --border:#d0d7de; --text:#1f2328; --muted:#59636e; --think:#1a7f37; --accent:#0969da; --warn:#9a6700;
+    --think-glow:rgba(26,127,55,.28); --pick-glow:rgba(9,105,218,.25);
+    --router:#86d176; --router-glow:rgba(134,209,118,.5); --router-tint:rgba(134,209,118,.12); --router-ink:#1a4d22;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:13.5px/1.45 'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  /* symbolic / numeric values → JetBrains Mono */
+  code, .cost, .genlabel, .scorerow .val, .minilab, .runtotal, .total .fig, .pill, .model {
+    font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+  header { padding:16px 22px 12px; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#ffffff,var(--bg)); }
+  h1 { margin:0 0 3px; font-size:20px; letter-spacing:-.3px; }
+  header p { margin:2px 0 0; color:var(--muted); max-width:820px; font-size:13px; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:8px; font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  .wrap { max-width:1280px; margin:0 auto; padding:18px 18px 40px; }
+
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:13px 14px 14px; margin-bottom:16px; }
+  .card.hero { border-color:rgba(9,105,218,.35); box-shadow:0 0 0 1px rgba(9,105,218,.12); }
+  .card-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .tasktag { font-size:10.5px; text-transform:uppercase; letter-spacing:.7px; color:var(--accent);
+    background:rgba(9,105,218,.1); border:1px solid rgba(9,105,218,.3); padding:2px 8px; border-radius:999px; }
+  .userinst { font-size:14.5px; margin:6px 0 2px; }
+  .userinst .q { color:var(--muted); }
+
+  /* ── shared video grid ── */
+  .vids { position:relative; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .vidbox { position:relative; }
+  .vidbox .vlabel { position:absolute; top:5px; left:5px; z-index:2; font-size:9.5px;
+    background:rgba(0,0,0,.6); padding:1px 6px; border-radius:5px; color:#fff; letter-spacing:.3px; }
+  video { width:100%; border-radius:7px; background:#000; display:block; aspect-ratio:4/3; object-fit:cover; max-height:230px; }
+
+  /* ── generation overlay ── */
+  .gen { position:absolute; inset:0; z-index:5; display:none; flex-direction:column; justify-content:center;
+    align-items:center; gap:9px; background:rgba(255,255,255,.88); border-radius:7px; backdrop-filter:blur(1px); }
+  .gen.active { display:flex; }
+  .genbar { width:76%; height:8px; background:var(--track); border-radius:999px; overflow:hidden;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.05); }
+  .genfill { height:100%; width:0%; border-radius:999px;
+    background:linear-gradient(90deg,var(--accent),#79c0ff); position:relative; }
+  .gen.think .genfill { background:linear-gradient(90deg,var(--think),#56d364); }
+  .genfill::after { content:""; position:absolute; inset:0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+    animation:shimmer 1.1s infinite; }
+  @keyframes shimmer { 0%{transform:translateX(-100%);} 100%{transform:translateX(100%);} }
+  .genlabel { font-size:12px; color:var(--text); font-variant-numeric:tabular-nums; }
+  .genlabel .tk { color:var(--think); }
+  /* end-of-run indicator (e.g. run stopped early / failed) */
+  .endcap { position:absolute; left:0; right:0; bottom:0; z-index:6; display:none;
+    text-align:center; font-size:11px; font-weight:650; padding:4px 6px; letter-spacing:.2px;
+    background:rgba(179,36,36,.92); color:#fff; }
+  .endcap.show { display:block; }
+
+  /* ── pair cards ── */
+  .planners { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px; }
+  @media (max-width:820px){ .planners{ grid-template-columns:1fr; } }
+  .planner { background:var(--panel2); border:2px solid var(--border); border-radius:10px;
+    padding:9px 10px 10px; position:relative; transition:border-color .35s,box-shadow .35s,opacity .35s; }
+  .planner h3 { margin:0; font-size:13.5px; }
+  .planner .model { color:var(--muted); font-size:11px; margin:1px 0 6px; }
+  .topline { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .cost { display:inline-flex; align-items:center; gap:5px; font-size:11px; background:var(--inset);
+    border:1px solid var(--border); border-radius:6px; padding:3px 7px; white-space:nowrap;
+    font-variant-numeric:tabular-nums; }
+  .cost .t { color:var(--text); font-weight:650; }
+  .cost.heavy { border-color:rgba(210,153,34,.5); }
+  .cost.heavy .t { color:var(--warn); }
+  .cost .tk { color:var(--think); }
+  .exec { font-size:11.5px; background:var(--inset); border:1px solid var(--border); border-radius:7px;
+    padding:5px 8px; margin:7px 0 8px; color:var(--text); }
+  .exec .lab { color:var(--muted); display:block; font-size:9.5px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:1px; }
+
+  .planner.pick, .planner.pick.think { border-color:var(--router);
+    box-shadow:0 0 0 1px var(--router),0 0 22px var(--router-glow); }
+  .planner.dim { opacity:.5; }
+  .badge { display:none; position:absolute; top:-11px; right:10px; background:var(--router); color:var(--router-ink);
+    font-weight:700; font-size:11px; padding:2px 10px; border-radius:999px; box-shadow:0 2px 9px rgba(0,0,0,.25); }
+  .planner.think .badge { background:var(--router); color:var(--router-ink); }
+  .planner.pick .badge { display:block; }
+
+  .controls { display:flex; gap:8px; align-items:center; margin-top:11px; flex-wrap:wrap; }
+  button.run { background:var(--accent); color:#fff; border:none; font-weight:650; font-size:13px;
+    padding:7px 15px; border-radius:8px; cursor:pointer; }
+  button.run:hover { filter:brightness(1.08); }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--border);
+    padding:7px 12px; border-radius:8px; cursor:pointer; font-size:12px; }
+  button.ghost:hover { color:var(--text); border-color:var(--muted); }
+  button:disabled { opacity:.5; cursor:default; }
+
+  .verdict { display:none; margin-top:11px; background:var(--inset); border:1px solid var(--border);
+    border-left:3px solid var(--accent); border-radius:8px; padding:10px 13px; }
+  .verdict.think { border-left-color:var(--router); }
+  .verdict.show { display:block; animation:fade .35s ease; }
+  @keyframes fade { from{opacity:0;transform:translateY(3px);} to{opacity:1;} }
+  .verdict .vhead { font-weight:650; margin-bottom:4px; font-size:13.5px; }
+  .verdict .vhead b { color:var(--router-ink); }
+  .verdict .rat { color:var(--muted); font-size:12.5px; }
+  .verdict .tradeoff { margin-top:7px; font-size:12.5px; }
+  .verdict .tradeoff b { color:var(--warn); }
+  .scores { margin-top:9px; display:grid; gap:5px; }
+  .scorerow { display:grid; grid-template-columns:130px 1fr 42px; align-items:center; gap:9px; font-size:11.5px; }
+  .scorerow .name { color:var(--muted); }
+  .bar { height:8px; background:var(--track); border-radius:999px; overflow:hidden; }
+  .bar > span { display:block; height:100%; width:0; border-radius:999px; transition:width .7s ease; background:var(--muted); }
+  .scorerow.win .bar > span { background:var(--accent); }
+  .scorerow.win.think .bar > span { background:var(--think); }
+  .scorerow .val { text-align:right; font-variant-numeric:tabular-nums; }
+  .src { font-size:10.5px; color:var(--muted); margin-top:6px; font-style:italic; }
+
+  /* ── hero comparison ── */
+  .cmp { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:10px; }
+  @media (max-width:980px){ .cmp{ grid-template-columns:1fr; } }
+  .col { background:var(--panel2); border:2px solid var(--border); border-radius:10px; padding:10px 11px 11px; }
+  .col.on { border-color:rgba(63,185,80,.45); }
+  .col.route { border-color:var(--router); background:var(--router-tint);
+    box-shadow:0 0 0 1px var(--router), 0 0 26px var(--router-glow); }
+  .col.route .col-head h3 { color:var(--router-ink); }
+  .col.route .col-head h3::after { content:" ★"; color:var(--router); }
+  .col.route .total .fig { color:var(--router-ink); }
+  .col-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+  .col-head h3 { margin:0; font-size:14px; }
+  .col-head .sub { color:var(--muted); font-size:11px; }
+  .col .vids { margin:8px 0 9px; }
+  .steps { display:grid; gap:6px; }
+  .step { border:1px solid var(--border); border-radius:8px; padding:6px 9px; background:var(--inset);
+    animation:stepIn .28s ease; }
+  .step.pending { display:none; }
+  @keyframes stepIn { from{opacity:0; transform:translateY(5px);} to{opacity:1; transform:none;} }
+  .step-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .step .si { font-size:11.5px; }
+  .pill { font-size:10px; font-weight:650; padding:1px 8px; border-radius:999px; white-space:nowrap; }
+  .pill.think { background:rgba(63,185,80,.16); color:var(--think); border:1px solid rgba(63,185,80,.4); }
+  .pill.base { background:rgba(139,148,158,.16); color:var(--muted); border:1px solid var(--border); }
+  .step .minilab { font-size:10px; color:var(--muted); margin-top:3px; font-variant-numeric:tabular-nums; }
+  .total { margin-top:9px; display:flex; align-items:baseline; gap:7px; }
+  .total .lab { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+  .total .fig { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .col.on .total .fig { color:var(--warn); }
+  .col.off .total .fig { color:var(--think); }
+  .outcome { margin-top:8px; font-size:11.5px; font-weight:600; padding:5px 8px; border-radius:7px; }
+  .outcome.ok  { color:var(--think); background:rgba(26,127,55,.10); border:1px solid rgba(26,127,55,.25); }
+  .outcome.bad { color:#b32424; background:rgba(179,36,36,.08); border:1px solid rgba(179,36,36,.22); }
+
+  footer { color:var(--muted); font-size:11.5px; padding:6px 22px 40px; text-align:center; }
+  code { background:var(--inset); border:1px solid var(--border); padding:1px 5px; border-radius:5px; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Router · Planner Alignment</h1>
+  <p>Every task admits a fast planner and a slow-but-smart one. The <b>router</b> predicts which one the task needs —
+     and the smart planner is only worth its latency sometimes. Hit <b>Run</b> to watch the planner "think" in real time before it acts.</p>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--think)"></span>thinking / larger / memory planner</span>
+    <span><span class="dot" style="background:var(--muted)"></span>fast / smaller / no-memory planner</span>
+    <span><span class="dot" style="background:var(--accent)"></span>router's pick</span>
+  </div>
+</header>
+
+<div class="wrap" id="app"></div>
+
+<footer>
+  Videos from <code id="baseLabel"></code>. Latencies are real <code>vlm.latency_ms</code> from each run's <code>meta.json</code>.
+  Planning bars are time-compressed (<span id="speedLabel"></span>× wall-clock) but count up to the true model time.
+  Offline: unzip <code>GOOD_VIDEOS.zip</code>, put this file inside <code>GOOD_VIDEOS/</code>, set <code>VIDEO_BASE="./"</code>.
+</footer>
+
+<script>
+// ───────────────────────────────────────────────────────────────────────────
+const VIDEO_BASE = "GOOD_VIDEOS/";   // offline: compressed videos in sibling folder
+// const VIDEO_BASE = "http://172.24.69.39:8008/code/droid/results/GOOD_VIDEOS/";  // live server (720p)
+const SPEED = 0.4;          // wall-clock = latency_ms * SPEED  (counter still shows true model time)
+const MIN_WALL = 280;       // ms, floor so fast calls still register
+const MAXBAR = 4500;        // ms, cap a single timeline bar so long think-calls stay watchable
+const VIDEO_RATE = 2.5;     // playback speed for each subtask's video segment
+// ───────────────────────────────────────────────────────────────────────────
+document.getElementById("baseLabel").textContent = VIDEO_BASE;
+document.getElementById("speedLabel").textContent = SPEED;
+
+const fmtLat = ms => ms >= 1000 ? (ms/1000).toFixed(1)+" s" : Math.round(ms)+" ms";
+
+// ── hero comparison: no-think only vs think only, same task ──
+const COMPARE = {
+  user: 'Place the fruits <span class="q">from heaviest to lightest</span> in the white bin.',
+  cols: [
+    { side:"off", title:"No-think only", sub:"fast — but grabs the wrong fruit",
+      dir:"fruit_nothink_run_2026_05_21_10-54-54", total:1992,
+      endcap:"✗ wrong fruit grabbed — unsuccessful",
+      outcome:{ ok:false, text:"✗ picks strawberry 2nd (out of order), gives up after two" },
+      steps:[
+        { si:"put the yellow banana in the white bin", mode:"base", lat:1336, t0:0,   t1:8.0 },
+        { si:"put the red strawberry in the white bin", mode:"base", lat:656, t0:8.0, t1:12.0 },
+      ]},
+    { side:"route", title:"Router", sub:"thinks only on the hard pick",
+      dir:"1_routingmultitaskdrop_run_2026_05_21_10-11-32", total:20542,
+      outcome:{ ok:true, text:"✓ same correct order — reasons only on the lime (1 of 3 picks)" },
+      steps:[
+        { si:"put the yellow banana in the white bin", mode:"base",  lat:1026,  t0:0,    t1:12.0 },
+        { si:"put the green lime in the white bin",    mode:"think", lat:19039, t0:12.0, t1:32.0 },
+        { si:"put the red strawberry in the white bin", mode:"base",  lat:477,  t0:32.0, t1:40.1 },
+      ]},
+    { side:"on", title:"Think only", sub:"reasons on every pick — even the easy ones",
+      dir:"fruit_allthink_run_2026_05_20_17-35-43", total:104591,
+      outcome:{ ok:true, text:"✓ banana → green → orange, all bagged, table cleared" },
+      steps:[
+        { si:"put the yellow banana in the white bin", mode:"think", lat:12849, t0:0,    t1:20.0 },
+        { si:"put the green apple in the white bin",   mode:"think", lat:36149, t0:20.0, t1:24.0 },
+        { si:"put the orange fruit in the white bin",  mode:"think", lat:55594, t0:24.0, t1:29.9 },
+      ]},
+  ],
+};
+
+const PAIRS = [
+  { tag:"Reasoning · cultures", loserCap:"✗ wrong dish picked — unsuccessful",
+    user:'Place the petri dish with the <span class="q">most cultures</span> in the white box.',
+    left:{label:"No-think planner",model:"Qwen3.5-9B",exec:"place the green petri dish in the white box",dir:"Science/1_no_think_run_2026_05_12_09-55-31",lat:1614},
+    right:{label:"Thinking planner",model:"Qwen3.5-9B · think",exec:"place the red petri dish in the white box",dir:"Science/1_think_run_2026_05_12_10-43-07",lat:11712,think:778},
+    pick:"right",kind:"think",
+    rationale:'"Most cultures" can\'t be read off a label — it needs visual reasoning over colony counts. No-think guesses (green); the thinking planner inspects and picks the red dish.',
+    scores:{real:false,rows:[{name:"No-think",val:0.42},{name:"Thinking",val:0.88,win:true,think:true}]} },
+
+  { tag:"Reasoning · eye protection", loserCap:"✗ wrong object — unsuccessful",
+    user:'I need to <span class="q">protect my eyes</span> — place the corresponding equipment in the white box.',
+    left:{label:"No-think planner",model:"Qwen3.5-9B",exec:"place the safety goggles in the white box",dir:"Science/2_no_think_run_2026_05_12_13-08-13",lat:1703},
+    right:{label:"Thinking planner",model:"Qwen3.5-9B · think",exec:"place the clear safety glasses in the white box",dir:"Science/2_think_run_2026_05_12_10-53-35",lat:9902,think:401},
+    pick:"right",kind:"think",
+    rationale:'The bench holds clear safety glasses, not goggles. No-think names a plausible-but-absent object; the thinking planner grounds to what is actually present.',
+    scores:{real:false,rows:[{name:"No-think",val:0.51},{name:"Thinking",val:0.83,win:true,think:true}]} },
+
+  { tag:"Reasoning · spatial", loserCap:"✗ wrong dish picked — unsuccessful",
+    user:'Place the petri dish <span class="q">closest to the black pen</span> into the white box.',
+    left:{label:"No-think planner",model:"Qwen3.5-9B",exec:"place the white petri dish into the white box",dir:"Science/3_no_think_run_2026_05_12_13-28-38",lat:1427},
+    right:{label:"Thinking planner",model:"Qwen3.5-9B · think",exec:"place the petri dish with green stick into the white box",dir:"Science/3_think_run_2026_05_12_13-39-20",lat:25616,think:1618},
+    pick:"right",kind:"think",
+    rationale:'Resolving "closest to the black pen" requires reasoning about relative position. No-think falls back to a generic descriptor (white); the thinking planner identifies the specific dish by the pen.',
+    scores:{real:false,rows:[{name:"No-think",val:0.47},{name:"Thinking",val:0.79,win:true,think:true}]} },
+
+  { tag:"Memory · counting", loserCap:"✗ never stops — unsuccessful",
+    user:'Place <span class="q">exactly two</span> white blocks in the brown box.',
+    left:{label:"No-memory planner",model:"Gemini ER · 336 steps · never ends",exec:"put the white block in the brown box (single subtask, all “stay”)",dir:"1_no_mem_run_2026_05_14_16-45-11",lat:1478},
+    right:{label:"Memory planner",model:"Gemini ER · 232 steps · 2 blocks → END",exec:"put the white block → put the white block → END",dir:"1_mem_run_2026_05_14_16-07-59",lat:2557},
+    pick:"right",kind:"think",
+    rationale:'Counting "exactly two" is a memory problem. Without a record of how many it has placed, the planner can only decide "stay" — 336 steps, never stops. With memory it tracks completion and ends after the second block.',
+    scores:{real:false,rows:[{name:"No-memory",val:0.30},{name:"Memory",val:0.92,win:true,think:true}]} },
+
+  { tag:"Model size · manipulation", loserCap:"✗ vague plan — unsuccessful",
+    user:'I am packing my first aid kit — <span class="q">compact the towel</span>.',
+    left:{label:"Small planner (9B)",model:"Qwen3.5-9B · 26 steps",exec:"compact the green towel",dir:"2_small_run_2026_05_13_18-01-39",lat:693},
+    right:{label:"Big planner (27B)",model:"Qwen3.5-27B · 80 steps",exec:"fold the green towel",dir:"2_big_run_2026_05_13_17-51-58",lat:1270},
+    pick:"right",kind:"think",
+    rationale:'Deformable folding is the hard case. The 9B emits a vague "compact"; the router escalates to 27B for the actionable "fold" plan. Small model is reserved for simple pick-and-place.',
+    scores:{real:false,rows:[{name:"Small (9B)",val:0.44},{name:"Big (27B)",val:0.74,win:true,think:true}]} },
+
+  { tag:"Model size · grounding", loserCap:"✗ wrong destination — unsuccessful",
+    user:'<span class="q">Organize the pink pepto with the other drugs.</span>',
+    left:{label:"Small planner (9B)",model:"Qwen3.5-9B · 76 steps",exec:"pick up the pink bottle and place it in the transparent box",dir:"3_small_run_2026_05_13_18-50-02",lat:664},
+    right:{label:"Big planner (27B)",model:"Qwen3.5-27B · 96 steps",exec:"move the pink bottle to the green tray",dir:"3_big_run_2026_05_13_19-02-29",lat:1295},
+    pick:"right",kind:"think",
+    rationale:'"With the other drugs" requires mapping to the right destination. The 9B picks an arbitrary container; the 27B resolves the destination to the green tray where the other medications sit.',
+    scores:{real:false,rows:[{name:"Small (9B)",val:0.49},{name:"Big (27B)",val:0.71,win:true,think:true}]} },
+];
+
+const app = document.getElementById("app");
+
+function vid(dir,file,label){
+  return `<div class="vidbox"><span class="vlabel">${label}</span>
+    <video muted playsinline preload="metadata" src="${VIDEO_BASE}${dir}/${file}"></video></div>`;
+}
+function vidsBlock(dir, think){
+  return `<div class="vids ${think?'think':''}">
+    <div class="gen ${think?'think':''}"><div class="genbar"><div class="genfill"></div></div><div class="genlabel"></div></div>
+    ${vid(dir,"video.mp4","external")}${vid(dir,"wrist_video.mp4","wrist")}
+    <div class="endcap"></div>
+  </div>`;
+}
+
+// Animate a generation bar over compressed wall-clock; label counts up to true model time. Returns a Promise.
+function generate(genEl, fillEl, labEl, latencyMs, thinkTok){
+  return new Promise(res=>{
+    const wall = Math.max(MIN_WALL, latencyMs*SPEED);
+    const modelSec = latencyMs/1000;
+    if (genEl) genEl.classList.add("active");
+    fillEl.style.width = "0%";
+    const start = performance.now();
+    (function tick(now){
+      const t = Math.min(1,(now-start)/wall);
+      fillEl.style.width = (t*100).toFixed(1)+"%";
+      const tk = thinkTok ? `  ·  <span class="tk">${Math.round(t*thinkTok)} tok</span>` : "";
+      labEl.innerHTML = `planning… ${(t*modelSec).toFixed(1)} s${tk}`;
+      if (t<1) requestAnimationFrame(tick);
+      else { labEl.innerHTML = `planned in ${modelSec.toFixed(1)} s` + (thinkTok?`  ·  <span class="tk">${thinkTok} reasoning tok</span>`:"");
+             setTimeout(()=>{ if(genEl) genEl.classList.remove("active"); res(); }, 160); }
+    })(start);
+  });
+}
+
+function genAndPlay(panelEl){
+  const vids = panelEl.querySelector(".vids");
+  const gen  = vids.querySelector(".gen");
+  return generate(gen, gen.querySelector(".genfill"), gen.querySelector(".genlabel"),
+                  +panelEl.dataset.lat, +panelEl.dataset.think || 0)
+    .then(()=>{
+      const fail = panelEl.dataset.fail;
+      if (fail){
+        const ec = vids.querySelector(".endcap");
+        vids.querySelector("video").addEventListener("ended",
+          ()=>{ ec.textContent=fail; ec.classList.add("show"); }, {once:true});
+      }
+      vids.querySelectorAll("video").forEach(v=>{ v.currentTime=0; v.play(); });
+    });
+}
+
+// ── render hero comparison ──
+(function(){
+  const c = COMPARE;
+  const card = document.createElement("div");
+  card.className = "card hero";
+  const colHTML = col => `
+    <div class="col ${col.side}" data-side="${col.side}">
+      <div class="col-head"><h3>${col.title}</h3><span class="sub">${col.sub}</span></div>
+      ${vidsBlock(col.dir, col.side==="on")}
+      <div class="steps">
+        ${col.steps.map(s=>`
+          <div class="step pending">
+            <div class="step-top"><span class="si">${s.si}</span>
+              <span class="pill ${s.mode}">${s.mode==='think'?'THINK':'no-think'}</span></div>
+            <div class="minilab">${fmtLat(s.lat)} call</div>
+          </div>`).join("")}
+      </div>
+      <div class="total"><span class="lab">total planning</span><span class="fig runtotal">0.0 s</span></div>
+      <div class="outcome ${col.outcome.ok?'ok':'bad'}">${col.outcome.text}</div>
+    </div>`;
+  card.innerHTML = `
+    <div class="card-head"><span class="tasktag">No-think vs Think · same task</span></div>
+    <div class="userinst">&ldquo;${c.user}&rdquo;</div>
+    <div class="controls"><button class="run runcmp">Run planners ▶</button>
+      <button class="ghost resetcmp" style="display:none">Reset</button></div>
+    <div class="cmp">${c.cols.map(colHTML).join("")}</div>`;
+  app.appendChild(card);
+
+  const runBtn = card.querySelector(".runcmp");
+  const resetBtn = card.querySelector(".resetcmp");
+
+  // Phase 1 — animate the planning bar ON THE VIDEO overlay over compressed wall time.
+  function planPhase(colEl, gen, s, total){
+    return new Promise(res=>{
+      const genFill=gen.querySelector(".genfill"), genLab=gen.querySelector(".genlabel");
+      const totalEl=colEl.querySelector(".runtotal");
+      const modelSec=s.lat/1000, wall=Math.min(Math.max(MIN_WALL,s.lat*SPEED),MAXBAR), start=performance.now();
+      gen.classList.toggle("think", s.mode==="think");
+      gen.classList.add("active");
+      (function tk(now){
+        const t=Math.min(1,(now-start)/wall);
+        genFill.style.width=(t*100).toFixed(1)+"%";
+        genLab.innerHTML=`planning… ${(t*modelSec).toFixed(1)} s`;
+        totalEl.textContent=((total+t*s.lat)/1000).toFixed(1)+" s";
+        t<1?requestAnimationFrame(tk):res();
+      })(start);
+    });
+  }
+  // Phase 2 — play just this subtask's video segment [t0,t1], then pause.
+  function playPhase(vids, s){
+    return new Promise(res=>{
+      vids.forEach(v=>{ try{v.currentTime=s.t0;}catch(e){} v.playbackRate=VIDEO_RATE; v.play().catch(()=>{}); });
+      const ref=vids[0]; let done=false;
+      const finish=()=>{ if(done)return; done=true; vids.forEach(v=>v.pause()); res(); };
+      (function watch(){ (ref.currentTime>=s.t1-0.03 || ref.ended) ? finish() : requestAnimationFrame(watch); })();
+    });
+  }
+  async function runColumn(colEl, col){
+    const vids=[...colEl.querySelectorAll("video")];
+    const gen=colEl.querySelector(".gen");
+    const rows=colEl.querySelectorAll(".step");
+    vids.forEach(v=>{ v.pause(); try{v.currentTime=col.steps[0].t0||0;}catch(e){} });
+    let total=0;
+    for (let i=0;i<col.steps.length;i++){
+      const s=col.steps[i];
+      await planPhase(colEl, gen, s, total);             // generate (bar shows on the video)
+      gen.classList.remove("active");
+      total+=s.lat;
+      colEl.querySelector(".runtotal").textContent=(total/1000).toFixed(1)+" s";
+      rows[i].querySelector(".minilab").textContent=`${(total/1000).toFixed(1)} s · ${fmtLat(s.lat)} call`;
+      rows[i].classList.remove("pending");               // subtask appears only after generation
+      await playPhase(vids, s);                          // play segment, then pause
+    }
+    if (!col.outcome.ok) {                               // run took the wrong action / failed
+      const ec=colEl.querySelector(".endcap");
+      ec.textContent=col.endcap || "✗ unsuccessful — wrong action taken";
+      ec.classList.add("show");
+    }
+  }
+  runBtn.addEventListener("click", ()=>{
+    runBtn.disabled = true; resetBtn.style.display="";
+    const cols = card.querySelectorAll(".col");
+    Promise.all(c.cols.map((col,i)=>runColumn(cols[i],col)));
+  });
+  resetBtn.addEventListener("click", ()=>{
+    card.querySelectorAll(".gen").forEach(g=>{ g.classList.remove("active"); g.querySelector(".genfill").style.width="0%"; });
+    card.querySelectorAll(".endcap").forEach(e=>e.classList.remove("show"));
+    card.querySelectorAll(".col").forEach((colEl,ci)=>{
+      colEl.querySelector(".runtotal").textContent="0.0 s";
+      colEl.querySelectorAll(".step").forEach((r,i)=>{
+        r.classList.add("pending");
+        r.querySelector(".minilab").textContent=`${fmtLat(c.cols[ci].steps[i].lat)} call`;
+      });
+      colEl.querySelectorAll("video").forEach(v=>{ v.pause(); try{v.currentTime=0;}catch(e){} });
+    });
+    runBtn.disabled=false; resetBtn.style.display="none";
+  });
+})();
+
+// ── render pair cards ──
+function costHTML(p){
+  if (p.lat==null) return "";
+  const heavy = p.lat>=5000;
+  const tk = p.think ? ` · <span class="tk">${p.think} tok</span>` : "";
+  return `<div class="cost ${heavy?'heavy':''}">⏱ <span class="t">${fmtLat(p.lat)}</span> / call${tk}</div>`;
+}
+function tradeoffHTML(p){
+  const win=p[p.pick], lose=p[p.pick==="left"?"right":"left"];
+  if (win.lat==null||lose.lat==null) return "";
+  const f = win.lat/lose.lat;
+  return f>=1.15
+    ? `<div class="tradeoff">Cost of being right: the chosen planner is <b>${f.toFixed(1)}× slower</b>
+        (${fmtLat(win.lat)} vs ${fmtLat(lose.lat)} per call) — routing pays this only when needed.</div>`
+    : `<div class="tradeoff">Little overhead here (${fmtLat(win.lat)} vs ${fmtLat(lose.lat)} per call).</div>`;
+}
+function plannerHTML(p,side,fail){
+  return `<div class="planner" data-side="${side}" data-lat="${p.lat||''}" data-think="${p.think||0}"${fail?` data-fail="${fail}"`:''}>
+    <span class="badge">Router's choice</span>
+    <div class="topline"><h3>${p.label}</h3>${costHTML(p)}</div>
+    <p class="model">${p.model}</p>
+    <div class="exec"><span class="lab">Generated sub-instruction</span>${p.exec}</div>
+    ${vidsBlock(p.dir, p.kind==='think' && side===p.pick)}
+  </div>`;
+}
+
+PAIRS.forEach(p=>{
+  const card=document.createElement("div"); card.className="card";
+  const winLabel=p[p.pick].label;
+  const loserSide = p.pick==="left" ? "right" : "left";
+  const loserCap = p.loserCap || "✗ unsuccessful — wrong action taken";
+  card.innerHTML=`
+    <div class="card-head"><span class="tasktag">${p.tag}</span>
+      <span class="userinst" style="margin:0">&ldquo;${p.user}&rdquo;</span></div>
+    <div class="planners">${plannerHTML(p.left,"left",loserSide==="left"?loserCap:"")}${plannerHTML(p.right,"right",loserSide==="right"?loserCap:"")}</div>
+    <div class="controls">
+      <button class="run">Run router ▶</button>
+      <button class="ghost genboth">⏱ Generate + play both</button>
+      <button class="ghost reset" style="display:none">Reset</button>
+    </div>
+    <div class="verdict ${p.kind==='think'?'think':''}">
+      <div class="vhead">Router selects → <b>${winLabel}</b></div>
+      <div class="rat">${p.rationale}</div>
+      ${tradeoffHTML(p)}
+    </div>`;
+  app.appendChild(card);
+
+  const planners=card.querySelectorAll(".planner");
+  const verdict=card.querySelector(".verdict");
+  const runBtn=card.querySelector(".run");
+  const resetBtn=card.querySelector(".reset");
+
+  card.querySelector(".genboth").addEventListener("click",()=>{
+    planners.forEach(pl=>genAndPlay(pl));
+  });
+  runBtn.addEventListener("click",()=>{
+    planners.forEach(pl=>{
+      if(pl.dataset.side===p.pick){ pl.classList.add("pick"); if(p.kind==="think") pl.classList.add("think"); }
+      else pl.classList.add("dim");
+    });
+    verdict.classList.add("show");
+    runBtn.style.display="none"; resetBtn.style.display="";
+    genAndPlay(card.querySelector(`.planner[data-side="${p.pick}"]`));
+    const loserPanel = card.querySelector(`.planner[data-side="${loserSide}"]`);
+    if (loserPanel.dataset.fail){
+      const ec=loserPanel.querySelector(".endcap");
+      ec.textContent=loserPanel.dataset.fail; ec.classList.add("show");
+    }
+  });
+  resetBtn.addEventListener("click",()=>{
+    planners.forEach(pl=>{ pl.classList.remove("pick","think","dim");
+      pl.querySelectorAll("video").forEach(v=>v.pause());
+      const g=pl.querySelector(".gen"); g.classList.remove("active"); g.querySelector(".genfill").style.width="0%"; });
+    card.querySelectorAll(".endcap").forEach(e=>e.classList.remove("show"));
+    verdict.classList.remove("show");
+    runBtn.style.display=""; resetBtn.style.display="none";
+  });
+});
+</script>
+</body>
+</html>
