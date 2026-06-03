@@ -153,6 +153,7 @@
   .cmp { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:10px; }
   @media (max-width:980px){ .cmp{ grid-template-columns:1fr; } }
   .col { background:var(--panel2); border:2px solid var(--border); border-radius:10px; padding:10px 11px 11px; }
+  .col.off { border-color:rgba(83,113,194,.45); }
   .col.on { border-color:rgba(13,45,70,.4); }
   .col.route { border-color:var(--router); background:var(--router-tint);
     box-shadow:0 0 0 1px var(--router), 0 0 26px var(--router-glow); }
@@ -375,14 +376,14 @@ foldMain.insertAdjacentHTML("beforeend",
   card.className = "card hero";
   const colHTML = col => `
     <div class="col ${col.side}" data-side="${col.side}">
-      <div class="col-head"><h3>${col.title}</h3><span class="sub">${col.sub}</span></div>
+      <div class="col-head"><h3><span class="dot" style="background:${col.side==='off'?'var(--base)':col.side==='route'?'var(--router)':'var(--think)'}"></span>${col.title}</h3><span class="sub">${col.sub}</span></div>
       ${vidsBlock(col.dir, col.side==="on")}
       <div class="steps">
         ${col.steps.map(s=>`
           <div class="step pending">
             <div class="step-top"><span class="si">${s.si}</span>
               <span class="pill ${s.mode}">${s.mode==='think'?'THINK':'no-think'}</span></div>
-            <div class="minilab">${fmtLat(s.lat)} call</div>
+            <div class="minilab">${fmtLat(s.lat)} planning call</div>
           </div>`).join("")}
       </div>
       <div class="total"><span class="lab">total planning</span><span class="fig runtotal">0.0 s</span></div>
@@ -437,7 +438,7 @@ foldMain.insertAdjacentHTML("beforeend",
       gen.classList.remove("active");
       total+=s.lat;
       colEl.querySelector(".runtotal").textContent=(total/1000).toFixed(1)+" s";
-      rows[i].querySelector(".minilab").textContent=`${(total/1000).toFixed(1)} s · ${fmtLat(s.lat)} call`;
+      rows[i].querySelector(".minilab").textContent=`${fmtLat(s.lat)} planning call`;
       rows[i].classList.remove("pending");               // subtask appears only after generation
       await playPhase(vids, s);                          // play segment, then pause
     }
@@ -459,7 +460,7 @@ foldMain.insertAdjacentHTML("beforeend",
       colEl.querySelector(".runtotal").textContent="0.0 s";
       colEl.querySelectorAll(".step").forEach((r,i)=>{
         r.classList.add("pending");
-        r.querySelector(".minilab").textContent=`${fmtLat(c.cols[ci].steps[i].lat)} call`;
+        r.querySelector(".minilab").textContent=`${fmtLat(c.cols[ci].steps[i].lat)} planning call`;
       });
       colEl.querySelectorAll("video").forEach(v=>{ v.pause(); try{v.currentTime=0;}catch(e){} });
     });
@@ -493,7 +494,7 @@ function tradeoffHTML(p){
 function plannerHTML(p,side,fail){
   return `<div class="planner" data-side="${side}" data-lat="${p.lat||''}" data-think="${p.think||0}"${fail?` data-fail="${fail}"`:''}>
     <span class="badge">Router's choice</span>
-    <div class="topline"><h3>${p.label}</h3>${costHTML(p)}</div>
+    <div class="topline"><h3><span class="dot" style="background:${side==='left'?'var(--base)':'var(--think)'}"></span>${p.label}</h3>${costHTML(p)}</div>
     <p class="model">${p.model}</p>
     <div class="exec"><span class="lab">Generated sub-instruction</span>${p.exec}</div>
     ${vidsBlock(p.dir, p.kind==='think' && side===p.pick)}
