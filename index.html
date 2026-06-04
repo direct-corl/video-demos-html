@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DIRECT Hardware Demo Videos</title>
+<title>DIRECT Hardware Demos</title>
+<!-- favicon: green-needle compass -->
+<link rel="icon" type="image/png" href="tab_icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -185,7 +187,11 @@
   .outcome.bad { color:#b32424; background:rgba(179,36,36,.08); border:1px solid rgba(179,36,36,.22); }
 
   footer { color:var(--muted); font-size:11.5px; padding:6px 22px 40px; text-align:center; scroll-margin-top:14px; }
-  footer .proj { margin:0 0 7px; font-size:13px; color:var(--text); }
+  footer .proj { margin:0 0 9px; font-size:13.5px; color:var(--text); }
+  footer .proj-sub { color:var(--muted); font-weight:400; }
+  footer .about-body { max-width:760px; margin:0 auto; text-align:left; line-height:1.55; font-size:12px; }
+  footer .about-body p { margin:0 0 6px; }
+  footer .about-body .dot { width:8px; height:8px; margin:0 3px 0 1px; }
   footer a { color:var(--accent); font-weight:600; text-decoration:none; }
   footer a:hover { text-decoration:underline; }
   code { background:var(--inset); border:1px solid var(--border); padding:1px 5px; border-radius:5px; font-size:11px; }
@@ -194,7 +200,7 @@
 <body>
 <header>
   <a href="#about" class="infobtn" title="About this demo, data &amp; project page"><span class="ic">ⓘ</span><span class="lbl">About &amp; project page</span></a>
-  <h1>DIRECT (CoRL 2026) Hardware Demos</h1>
+  <h1>🧭 DIRECT (CoRL 2026) Hardware Demo Videos</h1>
   <p>Every task admits a fast planner and a slow-but-smart one. The <b>router</b> predicts which one the task needs —
      and the smart planner is only worth its latency sometimes. Hit <b>Run</b> to watch the planner "think" in real time before it acts.</p>
   <div class="legend">
@@ -207,11 +213,21 @@
 <div class="wrap" id="app"></div>
 
 <footer id="about">
-  <p class="proj"><b>DIRECT</b> (CoRL 2026) — project page:
-    <a id="projLink" href="#" target="_blank" rel="noopener">project page</a></p>
-  Videos from <code id="baseLabel"></code>. Latencies are real <code>vlm.latency_ms</code> from each run's <code>meta.json</code>.
-  Planning bars are time-compressed (<span id="speedLabel"></span>× wall-clock) but count up to the true model time.
-  Offline: unzip <code>GOOD_VIDEOS.zip</code>, put this file inside <code>GOOD_VIDEOS/</code>, set <code>VIDEO_BASE="./"</code>.
+  <p class="proj"><b>DIRECT</b> (CoRL 2026)
+    <span class="proj-sub">— when &amp; where to allocate test-time compute in embodied planners</span>
+    · <a id="projLink" href="#" target="_blank" rel="noopener">project page</a></p>
+  <div class="about-body">
+    <p>Real Franka / DROID hardware rollouts. For each task a <b>router</b> chooses between a
+      <span class="dot" style="background:var(--base)"></span><b style="color:var(--base)">base</b> planner
+      (no-think · smaller · no-memory) and a
+      <span class="dot" style="background:var(--think)"></span><b>thinking</b> planner
+      (larger · memory), and
+      <span class="dot" style="background:var(--router)"></span><b style="color:var(--router-ink)">escalates only when the base planner would fail</b>
+      — on the multi-step task it decides per subtask.</p>
+    <p>Planning latencies are the real VLM call times (<code>vlm.latency_ms</code>). The on-video planning bars are
+      <b>sped up ~<span id="speedLabel"></span>× faster</b> than real time to stay watchable, but the counter ticks up
+      to the true model latency. Some clips are trimmed and background bystanders are blurred.</p>
+  </div>
 </footer>
 
 <script>
@@ -223,9 +239,8 @@ const MIN_WALL = 280;       // ms, floor so fast calls still register
 const MAXBAR = 4500;        // ms, cap a single timeline bar so long think-calls stay watchable
 const VIDEO_RATE = 2.5;     // playback speed for each subtask's video segment
 // ───────────────────────────────────────────────────────────────────────────
-document.getElementById("baseLabel").textContent = VIDEO_BASE;
-document.getElementById("speedLabel").textContent = SPEED;
 (function(){ const a=document.getElementById("projLink"); a.href=PROJECT_PAGE; a.textContent=PROJECT_PAGE.replace(/^https?:\/\//,""); })();
+document.getElementById("speedLabel").textContent = (1/SPEED).toFixed(1);   // 0.4 wall-clock factor → 2.5× faster
 
 const fmtLat = ms => ms >= 1000 ? (ms/1000).toFixed(1)+" s" : Math.round(ms)+" ms";
 
