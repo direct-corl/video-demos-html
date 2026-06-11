@@ -4,7 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DIRECT Hardware Demos</title>
-<!-- favicon: green-needle compass -->
 <link rel="icon" type="image/png" href="tab_icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -202,7 +201,7 @@
   <a href="#about" class="infobtn" title="About this demo, data &amp; project page"><span class="ic">ⓘ</span><span class="lbl">About &amp; project page</span></a>
   <h1>🧭 DIRECT Hardware Demo Videos</h1>
   <p>Every task admits a fast planner and a slow-but-smart one. The <b>router</b> predicts which one the task needs —
-     and the smart planner is only worth its latency sometimes. Hit <b>Run</b> to watch the planner "think" in real time before it acts.</p>
+      and the smart planner is only worth its latency sometimes. Hit <b>Run</b> to watch the planner "think" in real time before it acts.</p>
   <div class="legend">
     <span><span class="dot" style="background:var(--base)"></span>base · no-think / smaller / no-memory planner</span>
     <span><span class="dot" style="background:var(--think)"></span>thinking / larger / memory planner</span>
@@ -239,7 +238,16 @@ const MIN_WALL = 280;       // ms, floor so fast calls still register
 const MAXBAR = 4500;        // ms, cap a single timeline bar so long think-calls stay watchable
 const VIDEO_RATE = 2.5;     // playback speed for each subtask's video segment
 // ───────────────────────────────────────────────────────────────────────────
-(function(){ const a=document.getElementById("projLink"); a.href=PROJECT_PAGE; a.textContent=PROJECT_PAGE.replace(/^https?:\/\//,""); })();
+
+// Safely modify projLink only if it exists
+(function(){ 
+  const a = document.getElementById("projLink"); 
+  if (a) {
+    a.href = PROJECT_PAGE; 
+    a.textContent = PROJECT_PAGE.replace(/^https?:\/\//,""); 
+  }
+})();
+
 document.getElementById("speedLabel").textContent = (1/SPEED).toFixed(1);   // 0.4 wall-clock factor → 2.5× faster
 
 const fmtLat = ms => ms >= 1000 ? (ms/1000).toFixed(1)+" s" : Math.round(ms)+" ms";
